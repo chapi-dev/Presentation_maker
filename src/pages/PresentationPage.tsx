@@ -52,7 +52,7 @@ export default function PresentationPage() {
         }}
       >
         <ArrowLeft size={14} />
-        Volver
+        Back
       </button>
 
       <Presentation slides={renderedSlides} />

@@ -20,7 +20,7 @@ app.use("/api", slidesRouter);
 // In production, serve the Vite build
 const clientDist = path.join(__dirname, "..", "dist");
 app.use(express.static(clientDist));
-app.get("*", (_req, res) => {
+app.get("/{*splat}", (_req, res) => {
   res.sendFile(path.join(clientDist, "index.html"));
 });
 
