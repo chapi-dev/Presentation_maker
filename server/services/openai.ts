@@ -1,4 +1,4 @@
-import { AzureOpenAI } from "openai";
+import OpenAI, { AzureOpenAI } from "openai";
 import { DefaultAzureCredential, getBearerTokenProvider } from "@azure/identity";
 
 /** Slide types the frontend knows how to render */
@@ -48,30 +48,50 @@ const VALID_ICONS = [
   "BookOpen",
 ];
 
+/**
+ * Creates the appropriate OpenAI client based on environment configuration.
+ *
+ * Priority:
+ *   1. OPENAI_API_KEY → regular OpenAI (simplest, great for local dev)
+ *   2. AZURE_OPENAI_ENDPOINT → Azure OpenAI with DefaultAzureCredential
+ */
+function createClient(): OpenAI {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
+
+  // Option 1: Regular OpenAI API key (easiest for local development)
+  if (openaiKey && !openaiKey.includes("YOUR_")) {
+    console.log("✓ Using OpenAI API with API key");
+    return new OpenAI({ apiKey: openaiKey });
+  }
+
+  // Option 2: Azure OpenAI + DefaultAzureCredential (for Azure deployment)
+  if (azureEndpoint && !azureEndpoint.includes("YOUR_")) {
+    console.log("✓ Using Azure OpenAI with DefaultAzureCredential");
+    const credential = new DefaultAzureCredential();
+    const scope = "https://cognitiveservices.azure.com/.default";
+    const azureADTokenProvider = getBearerTokenProvider(credential, scope);
+
+    return new AzureOpenAI({
+      endpoint: azureEndpoint,
+      azureADTokenProvider,
+      apiVersion: "2024-08-01-preview",
+    });
+  }
+
+  throw new Error(
+    "No AI provider configured. Set OPENAI_API_KEY (for local dev) or AZURE_OPENAI_ENDPOINT (for Azure) in your .env file."
+  );
+}
+
 export async function generateSlides(
   topic: string,
   numSlides: number,
   searchContext: string
 ): Promise<SlideData[]> {
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || "gpt-4o";
+  const model = process.env.OPENAI_MODEL || process.env.AZURE_OPENAI_DEPLOYMENT || "gpt-4o";
 
-  if (!endpoint || endpoint.includes("YOUR_")) {
-    throw new Error(
-      "Azure OpenAI no está configurado. Actualiza el archivo .env con tu endpoint."
-    );
-  }
-
-  // Use DefaultAzureCredential (works with az login, managed identity, etc.)
-  const credential = new DefaultAzureCredential();
-  const scope = "https://cognitiveservices.azure.com/.default";
-  const azureADTokenProvider = getBearerTokenProvider(credential, scope);
-
-  const client = new AzureOpenAI({
-    endpoint,
-    azureADTokenProvider,
-    apiVersion: "2024-08-01-preview",
-  });
+  const client = createClient();
 
   const systemPrompt = `You are an expert presentation designer. You create professional, compelling slide decks.
 
@@ -99,7 +119,7 @@ ${searchContext}
 Generate exactly ${numSlides} slides. Return ONLY the JSON array.`;
 
   const response = await client.chat.completions.create({
-    model: deployment,
+    model,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMsal } from "@azure/msal-react";
+import { useAuth } from "../auth/AuthContext";
 import {
   Presentation as PresentationIcon,
   Sparkles,
@@ -9,15 +9,13 @@ import {
 } from "lucide-react";
 
 export default function HomePage() {
-  const { instance, accounts } = useMsal();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [topic, setTopic] = useState("");
   const [numSlides, setNumSlides] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const user = accounts[0];
 
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -52,7 +50,7 @@ export default function HomePage() {
   };
 
   const handleLogout = () => {
-    instance.logoutPopup();
+    logout();
   };
 
   return (
@@ -88,7 +86,7 @@ export default function HomePage() {
                 opacity: 0.7,
               }}
             >
-              {user.name || user.username}
+              {user?.name || user?.username}
             </span>
             <button
               onClick={handleLogout}
