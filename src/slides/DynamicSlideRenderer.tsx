@@ -23,6 +23,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { DiagramSlideContent } from "./DiagramSlide";
 
 /* ── Types ── */
 export type SlideType =
@@ -36,7 +37,21 @@ export type SlideType =
   | "split"
   | "comparison"
   | "big-number"
-  | "image-text";
+  | "image-text"
+  | "diagram";
+
+export interface DiagramNode {
+  id: string;
+  label: string;
+  icon?: string;
+  description?: string;
+}
+
+export interface DiagramConnection {
+  from: string;
+  to: string;
+  label?: string;
+}
 
 export interface SlideData {
   type: SlideType;
@@ -55,6 +70,12 @@ export interface SlideData {
   leftContent?: string;
   rightTitle?: string;
   rightContent?: string;
+  // Diagram fields
+  diagramType?: "flow" | "architecture" | "layers" | "cycle";
+  nodes?: DiagramNode[];
+  connections?: DiagramConnection[];
+  architectureImage?: string;
+  sourceUrl?: string;
 }
 
 /* ── Icon map ── */
@@ -730,6 +751,38 @@ function ImageTextSlideRender({ data, videoSrc, index }: { data: SlideData; vide
   );
 }
 
+/* ── Diagram slide (architecture diagrams) ── */
+
+function DiagramSlideRender({ data, videoSrc, index }: { data: SlideData; videoSrc: string; index: number }) {
+  const accent = getAccent(index);
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-black">
+      <VideoBackground src={videoSrc} />
+      <AccentGlow index={index} />
+      <div className="relative z-10 flex flex-col w-full h-full">
+        <SlideHeader pageLabel={data.pageLabel} />
+        <div style={{ padding: "0 5.2%" }}>
+          <h1 style={{ fontSize: "clamp(24px, 3vw, 56px)", fontWeight: 700, letterSpacing: "-0.02em" }}>
+            {data.title}
+          </h1>
+        </div>
+        <DiagramSlideContent
+          data={{
+            title: data.title,
+            content: data.content,
+            diagramType: data.diagramType,
+            nodes: data.nodes,
+            connections: data.connections,
+            architectureImage: data.architectureImage,
+            pageLabel: data.pageLabel,
+          }}
+          accentColor={accent.solid}
+        />
+      </div>
+    </div>
+  );
+}
+
 /* ── Main renderer: converts SlideData[] → ReactElement[] ── */
 export function renderSlides(slides: SlideData[]): ReactElement[] {
   return slides.map((data, index) => {
@@ -757,6 +810,8 @@ export function renderSlides(slides: SlideData[]): ReactElement[] {
         return <BigNumberSlideRender key={key} data={data} videoSrc={videoSrc} index={index} />;
       case "image-text":
         return <ImageTextSlideRender key={key} data={data} videoSrc={videoSrc} index={index} />;
+      case "diagram":
+        return <DiagramSlideRender key={key} data={data} videoSrc={videoSrc} index={index} />;
       case "outro":
         return <OutroSlideRender key={key} data={data} videoSrc={videoSrc} index={index} />;
       default:

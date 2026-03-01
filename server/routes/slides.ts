@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { generateSlides } from "../services/openai.js";
 import { searchWeb } from "../services/search.js";
+import { buildLearnContext, isMicrosoftTopic } from "../services/microsoftLearn.js";
 
 const router = Router();
 
@@ -22,13 +23,29 @@ router.post("/generate", async (req: Request, res: Response) => {
 
     console.log(`Generating ${numSlides} slides about: "${topic}"`);
 
-    // Step 1: Search the web for information
-    console.log("Searching the web...");
-    const searchResults = await searchWeb(topic);
+    // Step 1: Check if it's a Microsoft/Azure topic → use Learn docs
+    const isMsTopic = isMicrosoftTopic(topic);
+    let searchContext = "";
+    let learnDiagrams: { src: string; alt: string }[] = [];
 
-    // Step 2: Generate slides using Azure OpenAI with the search context
+    if (isMsTopic) {
+      console.log("📚 Microsoft topic detected — searching Microsoft Learn...");
+      const learnContext = await buildLearnContext(topic);
+      searchContext = learnContext.formattedContext;
+      learnDiagrams = learnContext.architectureDiagrams.map((d) => ({
+        src: d.src,
+        alt: d.alt,
+      }));
+      console.log(`✅ Learn context ready (${searchContext.length} chars, ${learnDiagrams.length} diagrams)`);
+    } else {
+      // Fallback to Bing search for non-Microsoft topics
+      console.log("Searching the web...");
+      searchContext = await searchWeb(topic);
+    }
+
+    // Step 2: Generate slides using AI with the search/Learn context
     console.log("Generating slides with AI...");
-    const slides = await generateSlides(topic, numSlides, searchResults);
+    const slides = await generateSlides(topic, numSlides, searchContext, learnDiagrams);
 
     res.json({ slides });
   } catch (error: any) {

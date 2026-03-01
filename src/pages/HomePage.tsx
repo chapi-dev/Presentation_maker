@@ -15,7 +15,22 @@ export default function HomePage() {
   const [topic, setTopic] = useState("");
   const [numSlides, setNumSlides] = useState(5);
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Generando presentación...");
   const [error, setError] = useState("");
+
+  // Detect Microsoft/Azure topics for loading indicator
+  const MS_KEYWORDS = [
+    "azure", "microsoft", "dotnet", ".net", "c#", "visual studio", "vscode",
+    "power bi", "power automate", "sharepoint", "teams", "dynamics", "cosmos",
+    "entra", "defender", "sentinel", "synapse", "fabric", "copilot", "bicep",
+    "app service", "container apps", "aks", "functions", "devops", "blazor",
+    "graph api", "maui", "signalr", "asp.net", "openai",
+  ];
+
+  const isMsTopic = (t: string) => {
+    const lower = t.toLowerCase();
+    return MS_KEYWORDS.some((kw) => lower.includes(kw));
+  };
 
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -24,6 +39,11 @@ export default function HomePage() {
     }
     setError("");
     setLoading(true);
+    setLoadingMsg(
+      isMsTopic(topic.trim())
+        ? "Investigando Microsoft Learn..."
+        : "Generando presentación..."
+    );
 
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || "";
@@ -261,7 +281,7 @@ export default function HomePage() {
             {loading ? (
               <>
                 <Loader2 size={20} className="animate-spin" />
-                Generando presentación...
+                {loadingMsg}
               </>
             ) : (
               <>
@@ -279,7 +299,7 @@ export default function HomePage() {
         style={{ padding: "1.5% 5%" }}
       >
         <span style={{ fontSize: "11px", opacity: 0.3 }}>
-          Powered by Azure OpenAI · Bing Search · React
+          Powered by Azure OpenAI · Microsoft Learn · React
         </span>
       </footer>
     </div>

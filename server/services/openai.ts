@@ -13,7 +13,21 @@ export type SlideType =
   | "split"
   | "comparison"
   | "big-number"
-  | "image-text";
+  | "image-text"
+  | "diagram";
+
+export interface DiagramNode {
+  id: string;
+  label: string;
+  icon?: string;    // key from AZURE_ICONS
+  description?: string;
+}
+
+export interface DiagramConnection {
+  from: string;
+  to: string;
+  label?: string;
+}
 
 export interface SlideData {
   type: SlideType;
@@ -32,6 +46,12 @@ export interface SlideData {
   leftContent?: string;
   rightTitle?: string;
   rightContent?: string;
+  // Diagram slide fields
+  diagramType?: "flow" | "architecture" | "layers" | "cycle";
+  nodes?: DiagramNode[];
+  connections?: DiagramConnection[];
+  architectureImage?: string; // URL from Learn
+  sourceUrl?: string;         // Learn source reference
 }
 
 const VALID_ICONS = [
@@ -96,7 +116,8 @@ function createClient(): OpenAI {
 export async function generateSlides(
   topic: string,
   numSlides: number,
-  searchContext: string
+  searchContext: string,
+  learnDiagrams: { src: string; alt: string }[] = []
 ): Promise<SlideData[]> {
   const model = process.env.OPENAI_MODEL || process.env.AZURE_OPENAI_DEPLOYMENT || "gpt-4o";
 
@@ -144,6 +165,13 @@ AVAILABLE SLIDE TYPES:
 "image-text" — Visual accent panel with detailed text
   Fields: title, content (detailed paragraph 3-4 sentences), imageQuery (1-2 English words for abstract visual, e.g. "neural network", "cloud computing", "data flow")
 
+"diagram" — Architecture or flow diagram showing how components connect (GREAT for Azure/Microsoft/technical topics)
+  Fields: title, content (1-2 sentences explaining the architecture), diagramType (one of: "flow", "architecture", "layers", "cycle"),
+  nodes: [{id: "unique-id", label: "Service Name", icon: "azure-icon-key", description: "Short description"}] (3-7 nodes),
+  connections: [{from: "node-id", to: "node-id", label: "optional relationship label"}]
+  Available icon keys for nodes: app-service, functions, storage, database, container, kubernetes, network, security, monitor, ai, api, identity, messaging, compute, devops, cloud
+  Use this type when explaining system architectures, data flows, integration patterns, or service relationships.
+
 "outro" — Closing slide
   Fields: title, content (call to action or summary)
 
@@ -160,12 +188,23 @@ LANGUAGE:
 - All text in the SAME language as the topic. If the topic is in Spanish, write everything in Spanish, etc.
 - pageLabel should be "Page XXX" format (001, 002, etc.). Cover and outro don't need one.`;
 
+  const hasLearnContext = searchContext.includes("MICROSOFT LEARN DOCUMENTATION");
+  const diagramHint = learnDiagrams.length > 0
+    ? `\nIMPORTANT: Architecture diagrams were found in Microsoft Learn. Include at least 1-2 "diagram" type slides showing how the services/components connect. Available diagrams: ${learnDiagrams.map(d => d.alt).join(", ")}`
+    : "";
+
+  const learnHint = hasLearnContext
+    ? `\nThis is a Microsoft/Azure topic. Use the Microsoft Learn documentation below as the PRIMARY source of truth. Structure the presentation to follow the documentation's logical sections. Include "diagram" slides to show architectures and service relationships.`
+    : "";
+
   const userPrompt = `Create a professional technical presentation with exactly ${numSlides} slides about: "${topic}"
 
-${searchContext ? `Context from web research:\n${searchContext}\n\n` : ""}Requirements:
+${searchContext ? `Context from research:\n${searchContext}\n` : ""}${learnHint}${diagramHint}
+
+Requirements:
 - Use at LEAST 5 different slide types for maximum visual variety
 - Ensure deep technical detail throughout — be specific, not generic
-- NO dates or year references anywhere in any slide
+- NO dates or year references anywhere in any slide${hasLearnContext ? "\n- For Microsoft/Azure topics, include at least one 'diagram' slide showing architecture/flow" : ""}
 - Generate exactly ${numSlides} slides
 - Return ONLY the JSON array`;
 
@@ -176,7 +215,7 @@ ${searchContext ? `Context from web research:\n${searchContext}\n\n` : ""}Requir
       { role: "user", content: userPrompt },
     ],
     temperature: 0.85,
-    max_tokens: 8000,
+    max_tokens: 10000,
   });
 
   const raw = response.choices[0]?.message?.content?.trim() ?? "[]";
@@ -186,14 +225,26 @@ ${searchContext ? `Context from web research:\n${searchContext}\n\n` : ""}Requir
 
   try {
     const slides: SlideData[] = JSON.parse(cleaned);
-    // Add page labels
-    return slides.map((s, i) => ({
-      ...s,
-      pageLabel:
-        s.type === "cover" || s.type === "outro"
-          ? undefined
-          : `Page ${String(i).padStart(3, "0")}`,
-    }));
+    // Add page labels and enrich diagram slides with Learn images
+    return slides.map((s, i) => {
+      const enriched: SlideData = {
+        ...s,
+        pageLabel:
+          s.type === "cover" || s.type === "outro"
+            ? undefined
+            : `Page ${String(i).padStart(3, "0")}`,
+      };
+
+      // If this is a diagram slide and we have architecture diagrams from Learn, attach one
+      if (s.type === "diagram" && learnDiagrams.length > 0 && !s.architectureImage) {
+        const diagramIndex = slides.filter((sl, idx) => sl.type === "diagram" && idx < i).length;
+        if (diagramIndex < learnDiagrams.length) {
+          enriched.architectureImage = learnDiagrams[diagramIndex].src;
+        }
+      }
+
+      return enriched;
+    });
   } catch {
     console.error("Failed to parse AI response:", cleaned);
     throw new Error("El modelo AI retornó una respuesta inválida. Intenta de nuevo.");
